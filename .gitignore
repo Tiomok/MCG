@@ -1,0 +1,5 @@
+checkpoints/
+data/cifar10/
+data/data_cifar10_mi_resnet18.npy
+save/cifar10/
+checkpoints/cifar10_mcg.pth.tar
