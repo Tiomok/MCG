@@ -12,6 +12,15 @@ from advertorch.attacks import LinfPGDAttack
 from advertorch.context import ctx_noparamgrad_and_eval
 
 
+def deepcopy_flow(flow):
+    # 手动排除掉模型中的张量，以避免深拷贝
+    params = {k: v for k, v in flow.state_dict().items() if not isinstance(v, torch.Tensor)}
+    # 浅拷贝其他部分
+    _flow_copy = copy.copy(flow)
+    # 恢复原始参数
+    _flow_copy.load_state_dict(params, strict=False)
+    return _flow_copy
+
 class Trainer(object):
 
     def __init__(self, flow, adv_models, query_set_models, optim, train_set, valid_set, args, cuda):
@@ -37,9 +46,9 @@ class Trainer(object):
             os.makedirs(self.checkpoints_dir)
 
         # model
-        self.flow = flow
+        self.flow = flow.cuda()
         self.flow.eval()
-        self.adv_models = adv_models
+        self.adv_models = [model.cuda() for model in adv_models]
         self.query_set_models = query_set_models
         self.adv_model_id = 0
 
@@ -55,11 +64,15 @@ class Trainer(object):
         self.trainingset_loader = DataLoader(train_set,
                                              batch_size=self.batch_size,
                                              shuffle=True,
+                                             num_workers=4,
+                                             pin_memory=True,
                                              drop_last=True)
         self.validset_loader = DataLoader(valid_set,
                                           batch_size=self.batch_size,
                                           shuffle=False,
-                                          drop_last=False)
+                                          num_workers=4,
+                                          drop_last=False,
+                                          pin_memory=True,)
 
         self.num_epochs = args.num_epochs
         self.global_step = args.num_steps
@@ -110,7 +123,7 @@ class Trainer(object):
             logits = adv_model(y)
 
             if not self.target:
-                one_hot = torch.zeros_like(logits, dtype=torch.uint8)
+                one_hot = torch.zeros_like(logits, dtype=torch.uint8).cuda()
                 label = label.reshape(-1, 1)
                 one_hot.scatter_(1, label, 1)
                 one_hot = one_hot.bool()
@@ -131,6 +144,11 @@ class Trainer(object):
 
         return loss
 
+
+    """
+    函数用法：对输入样本X进行数据增强
+    no_adv:True 意味着会随机选择一个对抗模型，并以一定的迭代次数生成对抗样本。
+    """
     def augmentation(self, x, true_lab, no_adv=False):
         if self.args.adv_aug and (not no_adv):
             # x = preprocess(x, 1.0, 0.0, self.x_bins, False)
@@ -142,9 +160,9 @@ class Trainer(object):
                 if iter_num > 0:
                     adversary = self.adversary_list[model_idx]
                     with ctx_noparamgrad_and_eval(model_chosen):
-                        x = adversary.perturb(x, None)
+                        x = adversary.perturb(x.cuda(), None)
                 else:
-                    x = preprocess(x, 1.0, 0.0, self.x_bins, False)
+                    x = preprocess(x.cuda(), 1.0, 0.0, self.x_bins, False)
 
             elif not no_adv:
                 model_idx = np.random.randint(0, len(self.adv_models))
@@ -153,9 +171,9 @@ class Trainer(object):
                 adversary = self.adversary_list[model_idx]
 
                 with ctx_noparamgrad_and_eval(model_chosen):
-                    x = adversary.perturb(x, None)
+                    x = adversary.perturb(x.cuda(), None)
         else:
-            x = preprocess(x, 1.0, 0.0, self.x_bins, False)
+            x = preprocess(x.cuda(), 1.0, 0.0, self.x_bins, False)
         return x
 
     def schedule(self, loss_prob, loss_cls, epoch):
@@ -181,11 +199,12 @@ class Trainer(object):
         label = label.long()
 
         processed_x = self.augmentation(x, label, epoch < self.args.adv_epoch)
-        _flow = copy.deepcopy(self.flow)
+        # _flow = copy.deepcopy(self.flow)
+        _flow = deepcopy_flow(self.flow)
 
         self.optim = torch.optim.Adam(self.flow.parameters(), lr=0.0004, betas=self.args.betas,
                                       weight_decay=self.args.regularizer)
-
+        #元内部更新
         for i in range(self.meta_iteration):
             y, logdet = self.flow.decode(processed_x, return_prob=True)
 
@@ -218,8 +237,8 @@ class Trainer(object):
         mean_loss_prob, mean_loss_cls = 0, 0
         with torch.no_grad():
             for batch_data in self.validset_loader:
-                images = batch_data[0]
-                labels = batch_data[1]
+                images = batch_data[0].cuda()
+                labels = batch_data[1].cuda()
                 if self.cuda:
                     images = images.cuda()
                     labels = labels.cuda()
@@ -264,6 +283,8 @@ class Trainer(object):
                     print(
                         "Iteration: {}/{} \t Epoch: {}/{} \t Elapsed time: {:.2f} \t Meta train loss prob: {:.4f} \t loss cls: {:.4f}".format(
                             self.global_step, total_its, epoch, self.num_epochs, elapsed, loss_prob, loss_cls))
+
+                torch.cuda.synchronize()
 
                 if batch_id % self.args.log_gap == 0:
                     mean_loss_prob = float(mean_loss_prob / float(num_batchs))

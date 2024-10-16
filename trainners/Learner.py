@@ -65,10 +65,10 @@ class Trainer(object):
         self.y_bins = args.y_bins
 
         self.num_epochs = args.num_epochs
-        self.log_gap = args.log_gap
+        self.log_gap = args.log_gap             #log_gap将当前的训练损失和时间写入日志文件。
         self.inference_gap = args.inference_gap
-        self.test_gap = args.test_gap
-        self.save_gap = args.save_gap
+        self.test_gap = args.test_gap           #test_gap在验证集上进行验证，并记录验证集上的损失。
+        self.save_gap = args.save_gap           #save_gap保存模型的检查点，包括当前的模型权重和优化器状态。
 
         # device
         self.cuda = cuda

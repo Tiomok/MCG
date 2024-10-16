@@ -1,14 +1,19 @@
+import sys
+# 将父目录添加到系统路径
+sys.path.append('../')
+
 import pickle
 import argparse
 import torch
 import numpy as np
 import tqdm
 from torch.utils.data import DataLoader
-
-from data.datasets import imagenet, cifar10
+# from data.datasets import imagenet, cifar10
+from datasets import imagenet, cifar10
 from utils.load_models import load_imagenet_model, load_cifar_model
+# from load_models import load_imagenet_model, load_cifar_model
 from attacks.ifgsm_attack import IFGSM_Based_Attacker
-
+# from ifgsm_attack import IFGSM_Based_Attacker
 
 def save_data():
     print("Save data.")
@@ -20,10 +25,11 @@ def save_data():
         data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
         linf = 0.05
     elif args.dataset == 'cifar10':
-        model_name = 'Resnet18'
+        # model_name = 'Resnet18'
+        model_name = 'resnet18'
         model = load_cifar_model(model_name)
         dataset = cifar10(root=args.dataroot, mode='train')
-        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
+        data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, drop_last=True)
         linf = 8. / 255.
     else:
         raise NotImplementedError

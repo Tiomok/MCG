@@ -12,6 +12,7 @@ try:
     from surro_models.cifar10_models.resnet import ResNet18, ResNet34
     from surro_models.cifar10_models.vgg import VGG
     from surro_models.cifar10_models.pyramidnet import pyramid_net110
+    from surro_models.cifar10_models.pyramidnet import pyramid_net200
     from surro_models.cifar10_models.densenet import DenseNet121
     from surro_models.cifar10_models.preact_resnet import PreActResNet18
 except Exception:
@@ -109,7 +110,7 @@ def load_imagenet_model(model_name, require_optim=False, defence_method=None):
     return model
 
 
-def load_cifar_model(model_name, home_path='checkpoints/cifar10_target_models/', require_optim=False, defence_method=None):
+def load_cifar_model(model_name, home_path='/home/chen/ghh/MCG-Blackbox/checkpoints/cifar10_target_models/', require_optim=False, defence_method=None):
     print('Load cifar model: ', model_name)
     if model_name == 'resnet18':
         pretrained_model = ResNet18()
